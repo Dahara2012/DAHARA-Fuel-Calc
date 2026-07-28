@@ -1,0 +1,10 @@
+{
+  "identifier": "default",
+  "description": "Default capabilities for the overlay window",
+  "windows": ["overlay"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-set-position",
+    "core:window:allow-set-ignore-cursor-events"
+  ]
+}

@@ -1,4 +1,7 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { PhysicalPosition } from "@tauri-apps/api/dpi";
 import { isFuelState, type FuelState, type SidecarEvent } from "@dahara/shared";
 
 type Mood = "ok" | "bad" | "idle";
@@ -58,9 +61,24 @@ function renderIdle(): void {
 async function main(): Promise<void> {
   unitEl.textContent = "L";
 
-  let unlisten: UnlistenFn | null = null;
+  let unlistenFuel: UnlistenFn | null = null;
+  let unlistenMove: UnlistenFn | null = null;
+
   try {
-    unlisten = await listen<SidecarEvent>("fuel", (event) => {
+    unlistenMove = await listen<boolean>("move-mode", (event) => {
+      console.log("[renderer] move-mode received:", event.payload);
+      if (event.payload) {
+        root.classList.add("move-mode");
+      } else {
+        root.classList.remove("move-mode");
+      }
+    });
+  } catch (err) {
+    console.error("[renderer] failed to subscribe to move-mode events:", err);
+  }
+
+  try {
+    unlistenFuel = await listen<SidecarEvent>("fuel", (event) => {
       // When the user is not in a race session (garage, practice, pits),
       // reset the display to "—". This is safe because status events are
       // throttled to every ~0.5 s, and renderIdle() is idempotent.
@@ -82,10 +100,41 @@ async function main(): Promise<void> {
   }
 
   window.addEventListener("beforeunload", () => {
-    unlisten?.();
+    unlistenFuel?.();
+    unlistenMove?.();
   });
 
   renderIdle();
+
+  const win = getCurrentWebviewWindow();
+  let isDragging = false;
+  let startMouse = { x: 0, y: 0 };
+  let startWinPos = { x: 0, y: 0 };
+  let lastSetPos = { x: 0, y: 0 };
+
+  root.addEventListener("mousedown", (e) => {
+    if (!root.classList.contains("move-mode")) return;
+    startMouse = { x: e.screenX, y: e.screenY };
+    win.outerPosition().then((pos) => {
+      startWinPos = lastSetPos = { x: pos.x, y: pos.y };
+      isDragging = true;
+    });
+  });
+
+  document.addEventListener("mousemove", (e) => {
+    if (!isDragging) return;
+    lastSetPos = {
+      x: startWinPos.x + (e.screenX - startMouse.x),
+      y: startWinPos.y + (e.screenY - startMouse.y),
+    };
+    win.setPosition(new PhysicalPosition(lastSetPos.x, lastSetPos.y));
+  });
+
+  document.addEventListener("mouseup", () => {
+    if (!isDragging) return;
+    isDragging = false;
+    invoke("save_window_position", { x: lastSetPos.x, y: lastSetPos.y });
+  });
 }
 
 main();

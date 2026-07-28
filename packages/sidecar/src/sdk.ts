@@ -1,3 +1,4 @@
+import http from "node:http";
 import type { ISDK, SFSnapshot } from "./protocol.ts";
 import { parseSessionFromYaml } from "./session.ts";
 
@@ -32,6 +33,26 @@ function tryLoadIRacingSdk(): Promise<IRacingSdkModule | null> {
   return irsdkModulePromise;
 }
 
+const SIM_STATUS_URI = "http://127.0.0.1:32034/get_sim_status?object=simStatus";
+const SIM_CHECK_TIMEOUT_MS = 3_000;
+
+async function isSimRunning(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const req = http.get(SIM_STATUS_URI, (res) => {
+      let data = "";
+      res.on("data", (d) => { data += d; });
+      res.on("end", () => {
+        resolve(data.includes("running:1"));
+      });
+    });
+    req.setTimeout(SIM_CHECK_TIMEOUT_MS, () => {
+      req.destroy();
+      resolve(false);
+    });
+    req.on("error", () => resolve(false));
+  });
+}
+
 function readNum(
   value: readonly number[] | undefined,
   fallback: number,
@@ -47,6 +68,10 @@ export class IRacingSdkAdapter implements ISDK {
 
   async start(): Promise<boolean> {
     if (this.started) return true;
+    if (!(await isSimRunning())) {
+      process.stderr.write("[sidecar] iRacing not detected; skipping SDK initialization\n");
+      return false;
+    }
     const mod = await tryLoadIRacingSdk();
     if (!mod) return false;
     this.sdk = new mod.IRacingSDK({ autoEnableTelemetry: true });

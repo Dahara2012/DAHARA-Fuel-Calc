@@ -1,4 +1,3 @@
-use serde::Deserialize;
 use std::path::PathBuf;
 use std::process::{ExitStatus, Stdio};
 use tauri::{AppHandle, Emitter, Manager};
@@ -11,17 +10,6 @@ fn exit_status_desc(status: &ExitStatus) -> String {
     { format!("code={code} signal={:?}", status.signal()) }
     #[cfg(not(unix))]
     { format!("code={code}") }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(tag = "type", rename_all = "kebab-case")]
-pub enum SidecarEvent {
-    #[serde(rename = "state")]
-    FuelState(serde_json::Value),
-    #[serde(rename = "session-info")]
-    SessionInfo(serde_json::Value),
-    #[serde(rename = "status")]
-    Status(serde_json::Value),
 }
 
 pub fn resolve_sidecar_path(app: &AppHandle) -> Result<PathBuf, String> {
