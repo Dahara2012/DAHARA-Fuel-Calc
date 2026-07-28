@@ -193,9 +193,9 @@ impl TelemetryCoordinator {
     fn process_frame(&mut self, frame: &FuelTelemetry) -> Option<TelemetryEvent> {
         if self.detector.on_lap(frame.lap_completed) {
             eprintln!(
-                "[telemetry] SF crossing: lap={}, fuel={:.1}%, max={:.1}L",
+                "[telemetry] SF crossing: lap={}, fuel={:.0}%, max={:.1}L",
                 frame.lap_completed,
-                frame.fuel_level_pct,
+                frame.fuel_level_pct * 100.0,
                 self.fuel_max_l,
             );
 

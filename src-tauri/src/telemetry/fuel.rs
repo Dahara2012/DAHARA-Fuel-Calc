@@ -50,7 +50,7 @@ fn compute_remaining_laps(
 }
 
 pub fn compute_on_sf_crossing(inputs: &mut SFInputs) -> SFResult {
-    let fuel_level_l = (inputs.current_fuel_pct / 100.0) * inputs.fuel_max_l;
+    let fuel_level_l = inputs.current_fuel_pct * inputs.fuel_max_l;
 
     inputs.fuel_history.push(fuel_level_l);
     inputs.lap_time_history.push(inputs.last_lap_time_s);
@@ -105,7 +105,7 @@ mod tests {
     ) -> SFInputs<'a> {
         let mut inputs = SFInputs {
             fuel_max_l: 100.0,
-            current_fuel_pct: 50.0,
+            current_fuel_pct: 0.5,
             last_lap_time_s: 90.0,
             time_remain_s: 1800.0,
             laps_remaining: 25,
@@ -137,7 +137,7 @@ mod tests {
 
         for i in 0..5 {
             let mut ins = with_bufs(&mut fh, &mut lh, |x| {
-                x.current_fuel_pct = 60.0 - (i as f64) * 2.0;
+                x.current_fuel_pct = 0.6 - (i as f64) * 0.02;
                 x.last_lap_time_s = 90.0;
                 x.time_remain_s = 1800.0 - (i as f64) * 90.0;
                 x.session_time_sec = Some(1800.0);
@@ -146,7 +146,7 @@ mod tests {
         }
 
         let mut ins = with_bufs(&mut fh, &mut lh, |x| {
-            x.current_fuel_pct = 50.0;
+            x.current_fuel_pct = 0.5;
             x.last_lap_time_s = 90.0;
             x.time_remain_s = 1350.0;
             x.session_time_sec = Some(1800.0);
@@ -164,7 +164,7 @@ mod tests {
 
         for i in 0..5 {
             let mut ins = with_bufs(&mut fh, &mut lh, |x| {
-                x.current_fuel_pct = 50.0 - (i as f64) * 2.0;
+                x.current_fuel_pct = 0.5 - (i as f64) * 0.02;
                 x.last_lap_time_s = 80.0;
                 x.session_laps = Some(25);
                 x.session_time_sec = None;
@@ -174,7 +174,7 @@ mod tests {
         }
 
         let mut ins = with_bufs(&mut fh, &mut lh, |x| {
-            x.current_fuel_pct = 40.0;
+            x.current_fuel_pct = 0.4;
             x.last_lap_time_s = 80.0;
             x.laps_remaining = 22;
             x.session_laps = Some(25);
@@ -194,7 +194,7 @@ mod tests {
 
         for i in 0..5 {
             let mut ins = with_bufs(&mut fh, &mut lh, |x| {
-                x.current_fuel_pct = 90.0 - (i as f64) * 2.0;
+                x.current_fuel_pct = 0.9 - (i as f64) * 0.02;
                 x.last_lap_time_s = 80.0;
                 x.session_laps = Some(3);
                 x.session_time_sec = None;
@@ -204,7 +204,7 @@ mod tests {
         }
 
         let mut ins = with_bufs(&mut fh, &mut lh, |x| {
-            x.current_fuel_pct = 80.0;
+            x.current_fuel_pct = 0.8;
             x.last_lap_time_s = 80.0;
             x.laps_remaining = 3;
             x.session_laps = Some(3);
@@ -223,7 +223,7 @@ mod tests {
     fn pit_lap_spike_trust_median() {
         let mut fh = CappedBuffer::new(5);
         let mut lh = CappedBuffer::new(5);
-        let fuel = [50.0, 48.0, 46.0, 44.0, 42.0, 40.0, 60.0, 58.0, 56.0, 54.0, 52.0];
+        let fuel = [0.5, 0.48, 0.46, 0.44, 0.42, 0.4, 0.6, 0.58, 0.56, 0.54, 0.52];
         let lap_times = [90.0; 11];
 
         for i in 0..fuel.len() {
@@ -238,7 +238,7 @@ mod tests {
         }
 
         let mut ins = with_bufs(&mut fh, &mut lh, |x| {
-            x.current_fuel_pct = 50.0;
+            x.current_fuel_pct = 0.5;
             x.last_lap_time_s = 90.0;
             x.session_laps = Some(10);
             x.session_time_sec = None;
