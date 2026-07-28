@@ -15,7 +15,7 @@ mkdirSync(binariesDir, { recursive: true });
 const typecheck = spawnSync(
   "npm",
   ["run", "typecheck", "-w", "@dahara/sidecar"],
-  { cwd: root, stdio: "inherit" },
+  { cwd: root, stdio: "inherit", shell: true },
 );
 if (typecheck.status !== 0) {
   process.exit(typecheck.status ?? 1);
@@ -35,7 +35,7 @@ if (process.platform === "win32") {
       "packages/sidecar/src/index.ts",
       `--outfile=${out}`,
     ],
-    { cwd: root, stdio: "inherit" },
+    { cwd: root, stdio: "inherit", shell: true },
   );
   if (r.status !== 0) process.exit(r.status ?? 1);
   try {
