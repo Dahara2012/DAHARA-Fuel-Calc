@@ -1,13 +1,26 @@
 node_modules/
 dist/
 out/
-target/
+/target/
 *.log
 .DS_Store
 .vscode/
 .idea/
-src-tauri/target/
-src-tauri/binaries/
+
+# Track only specific release artifacts under target/
+src-tauri/target/*
+!src-tauri/target/release/
+src-tauri/target/release/*
+!src-tauri/target/release/dahara-fuel-calc.exe
+!src-tauri/target/release/bundle/
+src-tauri/target/release/bundle/*
+!src-tauri/target/release/bundle/msi/
+!src-tauri/target/release/bundle/nsis/
+
+# Track the sidecar .exe
+src-tauri/binaries/*
+!src-tauri/binaries/*.exe
+
 packages/*/dist/
 packages/*/node_modules/
 packages/renderer/dist/
