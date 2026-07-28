@@ -6,7 +6,7 @@
   "build": {
     "frontendDist": "../packages/renderer/dist",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build && node scripts/build-sidecar.mjs",
+    "beforeBuildCommand": "npm run build",
     "beforeDevCommand": "npm run dev -w @dahara/renderer"
   },
   "app": {
@@ -36,6 +36,6 @@
     "targets": ["msi", "nsis"],
     "icon": ["icons/icon.png", "icons/icon.ico"],
     "externalBin": [],
-    "resources": ["binaries/dahara-fuel-calc-sidecar-x86_64-pc-windows-msvc.exe"]
+    "resources": []
   }
 }

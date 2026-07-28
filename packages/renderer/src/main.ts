@@ -1,8 +1,34 @@
+import { invoke, Channel } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { PhysicalPosition } from "@tauri-apps/api/dpi";
-import { isFuelState, type FuelState, type SidecarEvent } from "@dahara/shared";
+
+type FuelState = {
+  type: "state";
+  lap: number;
+  fuelLevelL: number;
+  fuelMaxL: number;
+  lapTimeS: number;
+  timeRemainS: number;
+  lapsLeft: number;
+  fuelPerLap: number;
+  refuelL: number;
+  fitsInTank: boolean;
+  confidence: "high" | "low";
+  timestamp: number;
+};
+
+type StatusEvent = {
+  type: "status";
+  connected: boolean;
+  inRace: boolean;
+};
+
+type TelemetryEvent = FuelState | StatusEvent;
+
+function isFuelState(e: TelemetryEvent): e is FuelState {
+  return e.type === "state";
+}
 
 type Mood = "ok" | "bad" | "idle";
 
@@ -33,9 +59,6 @@ function formatLiters(n: number): string {
 }
 
 function render(state: FuelState): void {
-  // While we don't have enough samples, the raw refuel number is
-  // meaningless (often negative — see fuel.ts::computeOnSFCrossing).
-  // Show 0.0 in gray until the math is reliable.
   if (state.confidence === "low") {
     setValue("0.0");
     setMood("idle");
@@ -61,7 +84,6 @@ function renderIdle(): void {
 async function main(): Promise<void> {
   unitEl.textContent = "L";
 
-  let unlistenFuel: UnlistenFn | null = null;
   let unlistenMove: UnlistenFn | null = null;
 
   try {
@@ -77,31 +99,20 @@ async function main(): Promise<void> {
     console.error("[renderer] failed to subscribe to move-mode events:", err);
   }
 
-  try {
-    unlistenFuel = await listen<SidecarEvent>("fuel", (event) => {
-      // When the user is not in a race session (garage, practice, pits),
-      // reset the display to "—". This is safe because status events are
-      // throttled to every ~0.5 s, and renderIdle() is idempotent.
-      if (
-        event.payload.type === "status" &&
-        event.payload.inRace === false
-      ) {
-        renderIdle();
-        return;
-      }
+  const channel = new Channel<TelemetryEvent>();
+  channel.onmessage = (event) => {
+    if (event.type === "status" && event.inRace === false) {
+      renderIdle();
+      return;
+    }
 
-      // Only FuelState events ("state" type) drive a fuel display update.
-      if (isFuelState(event.payload)) {
-        render(event.payload);
-      }
-    });
-  } catch (err) {
-    console.error("[renderer] failed to subscribe to fuel events:", err);
-  }
+    if (isFuelState(event)) {
+      render(event);
+    }
+  };
 
-  window.addEventListener("beforeunload", () => {
-    unlistenFuel?.();
-    unlistenMove?.();
+  invoke("start_telemetry", { channel }).catch((err) => {
+    console.error("[renderer] failed to start telemetry:", err);
   });
 
   renderIdle();

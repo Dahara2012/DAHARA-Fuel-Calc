@@ -1,6 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod sidecar;
+mod telemetry;
 mod window;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -11,12 +11,37 @@ use tauri::{
     Emitter, Manager, PhysicalPosition, WindowEvent,
 };
 
+use telemetry::TelemetryEvent;
+
 #[tauri::command]
 fn save_window_position(app: tauri::AppHandle, x: i32, y: i32) {
     window::save_position(&app, PhysicalPosition::new(x, y));
 }
 
+#[tauri::command]
+async fn start_telemetry(
+    channel: tauri::ipc::Channel<TelemetryEvent>,
+) -> Result<(), String> {
+    let conn = pitwall::LiveConnection::connect()
+        .await
+        .map_err(|e| format!("pitwall connect failed: {e}"))?;
+
+    tauri::async_runtime::spawn(async move {
+        telemetry::run_telemetry(conn, channel).await;
+    });
+
+    Ok(())
+}
+
 pub fn run() {
+    if std::env::var("DAHARA_LOG").is_ok() || cfg!(debug_assertions) {
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(
+                tracing_subscriber::EnvFilter::from_env("DAHARA_LOG"),
+            )
+            .try_init();
+    }
+
     tauri::Builder::default()
         .setup(|app| {
             let move_item = CheckMenuItemBuilder::with_id("move", "Move Overlay")
@@ -134,16 +159,9 @@ pub fn run() {
                 });
             }
 
-            let app_handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                if let Err(err) = sidecar::spawn_and_pump(app_handle.clone()).await {
-                    eprintln!("[host] sidecar failed to start: {err}");
-                }
-            });
-
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![save_window_position])
+        .invoke_handler(tauri::generate_handler![save_window_position, start_telemetry])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
