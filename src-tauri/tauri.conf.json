@@ -35,7 +35,7 @@
     "active": true,
     "targets": ["msi", "nsis"],
     "icon": ["icons/icon.png", "icons/icon.ico"],
-    "externalBin": ["binaries/dahara-fuel-calc-sidecar"],
-    "resources": []
+    "externalBin": [],
+    "resources": ["binaries/dahara-fuel-calc-sidecar-x86_64-pc-windows-msvc.exe"]
   }
 }
