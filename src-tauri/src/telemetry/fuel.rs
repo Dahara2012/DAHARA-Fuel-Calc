@@ -28,22 +28,18 @@ fn compute_remaining_laps(
     session_time_sec: Option<f64>,
     lap_times: &[f64],
 ) -> i32 {
-    let has_time_limit = session_time_sec.is_some_and(|s| s > 0.0);
+    let _ = session_time_sec; // unused — use telemetry time_remain_s directly
     let has_lap_limit = session_laps.is_some_and(|l| l > 0);
-
-    if has_time_limit && !has_lap_limit {
-        if lap_times.is_empty() {
-            return 0;
-        }
-        let med = median(lap_times);
-        if med <= 0.0 {
-            return 0;
-        }
-        return (time_remain_s / med).ceil().max(0.0) as i32;
-    }
 
     if has_lap_limit {
         return laps_remaining.max(0);
+    }
+
+    if time_remain_s > 0.0 && !lap_times.is_empty() {
+        let med = median(lap_times);
+        if med > 0.0 {
+            return (time_remain_s / med).ceil().max(0.0) as i32;
+        }
     }
 
     0
@@ -246,6 +242,21 @@ mod tests {
         });
         let r = compute_on_sf_crossing(&mut ins);
         assert!((r.fuel_per_lap - 2.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn time_based_fallback_without_session_info() {
+        let mut fh = CappedBuffer::new(5);
+        let mut lh = CappedBuffer::new(5);
+        let mut ins = with_bufs(&mut fh, &mut lh, |x| {
+            x.session_laps = None;
+            x.session_time_sec = None;
+            x.time_remain_s = 1800.0;
+            x.last_lap_time_s = 90.0;
+        });
+        let r = compute_on_sf_crossing(&mut ins);
+        assert_eq!(r.laps_left, 20);
+        assert!((r.fuel_level_l - 50.0).abs() < 1e-9);
     }
 
     #[test]

@@ -1,6 +1,6 @@
 {
   "name": "dahara-fuel-calc",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "private": true,
   "type": "module",
   "description": "iRacing fuel calculator overlay (Tauri + pitwall)",
@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "build:renderer": "npm run build -w @dahara/renderer",
-    "prebuild": "node scripts/make-icon.mjs",
+    "prebuild": "node scripts/sync-version.mjs && node scripts/make-icon.mjs",
     "build": "npm run prebuild && npm run build:renderer",
     "tauri": "tauri"
   },

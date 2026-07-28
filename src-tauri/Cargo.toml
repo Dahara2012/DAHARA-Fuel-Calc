@@ -1,6 +1,6 @@
 [package]
 name = "dahara-fuel-calc"
-version = "0.2.3"
+version = "0.2.4"
 description = "iRacing fuel calculator overlay"
 authors = ["DAHARA"]
 edition = "2021"
