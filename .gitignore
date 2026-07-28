@@ -1,0 +1,14 @@
+node_modules/
+dist/
+out/
+target/
+*.log
+.DS_Store
+.vscode/
+.idea/
+src-tauri/target/
+src-tauri/binaries/
+packages/*/dist/
+packages/*/node_modules/
+packages/renderer/dist/
+*.tsbuildinfo

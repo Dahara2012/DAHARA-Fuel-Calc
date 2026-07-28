@@ -1,0 +1,30 @@
+{
+  "name": "dahara-fuel-calc",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "iRacing fuel calculator overlay (Tauri + irsdk-node)",
+  "workspaces": [
+    "packages/shared",
+    "packages/sidecar",
+    "packages/renderer"
+  ],
+  "scripts": {
+    "build:shared": "npm run build -w @dahara/shared",
+    "build:sidecar:ts": "npm run build -w @dahara/sidecar",
+    "build:renderer": "npm run build -w @dahara/renderer",
+    "build:sidecar:exe": "node scripts/build-sidecar.mjs",
+    "prebuild": "node scripts/make-icon.mjs",
+    "build": "npm run prebuild && npm run build:shared && npm run build:sidecar:ts && npm run build:renderer",
+    "test": "npm test -w @dahara/sidecar",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.1.0",
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
