@@ -32,7 +32,7 @@ if (process.platform === "win32") {
       "build",
       "--compile",
       "--target=bun-windows-x64",
-      "packages/sidecar/src/index.ts",
+      "packages/sidecar/src/cli.ts",
       `--outfile=${out}`,
     ],
     { cwd: root, stdio: "inherit", shell: true },

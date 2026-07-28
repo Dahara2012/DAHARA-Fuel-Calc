@@ -1,7 +1,7 @@
 import { CappedBuffer } from "./rolling.ts";
 import { SFDetector } from "./sf-detector.ts";
 import { computeOnSFCrossing } from "./fuel.ts";
-import { IRacingSdkAdapter } from "./sdk.ts";
+export { IRacingSdkAdapter } from "./sdk.ts";
 import type { ISDK, SFSnapshot } from "./protocol.ts";
 import type {
   FuelState,
@@ -9,7 +9,6 @@ import type {
   SidecarEvent,
   StatusEvent,
 } from "@dahara/shared";
-import { pathToFileURL } from "node:url";
 
 const TICK_MS = 1000 / 60;
 const STATE_PUBLISH_TICK = 30;
@@ -164,66 +163,4 @@ export class SidecarRunner {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((res) => setTimeout(res, ms));
-}
-
-function emitJsonl(e: SidecarEvent): void {
-  try {
-    process.stdout.write(JSON.stringify(e) + "\n");
-  } catch {
-    // ignore broken pipe
-  }
-}
-
-async function main(): Promise<void> {
-  // The iRacing native SDK is Windows-only. On other platforms the package
-  // returns a mock that never produces data; the sidecar would sit in a
-  // useless `status(connected=false)` loop. Exit early so dev hosts and CI
-  // see a clear failure.
-  if (process.platform !== "win32") {
-    process.stderr.write(
-      `[sidecar] iRacing SDK is Windows-only; refusing to run on ${process.platform}.\n`,
-    );
-    process.exit(1);
-  }
-
-  const runner = new SidecarRunner({
-    sdkFactory: () => new IRacingSdkAdapter(),
-    emit: emitJsonl,
-    now: () => Date.now(),
-  });
-
-  const shutdown = () => {
-    runner.stop();
-    process.exit(0);
-  };
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
-
-  await runner.run();
-  // If run() returned without setting running=true, the SDK never loaded.
-  // Exit with a non-zero code so CI / the Tauri host can detect the problem.
-  if (!runner.isRunning()) {
-    process.exit(1);
-  }
-}
-
-function isEntryPoint(): boolean {
-  // Bun (including a `bun build --compile` binary): Bun.main is the entry path.
-  if (typeof Bun !== "undefined") {
-    return Bun.main === import.meta.path;
-  }
-  // Node: compare import.meta.url to process.argv[1].
-  if (!process.argv[1]) return false;
-  try {
-    return import.meta.url === pathToFileURL(process.argv[1]).href;
-  } catch {
-    return false;
-  }
-}
-
-if (isEntryPoint()) {
-  main().catch((err) => {
-    process.stderr.write(`[sidecar] fatal: ${String(err)}\n`);
-    process.exit(1);
-  });
 }
