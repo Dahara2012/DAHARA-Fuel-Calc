@@ -13,6 +13,10 @@ use self::fuel::{compute_on_sf_crossing, SFInputs};
 use self::rolling::CappedBuffer;
 use self::sf_detector::SFDetector;
 
+/// Fallback fuel tank capacity (liters) used when iRacing session info
+/// does not provide a value via `DriverInfo.DriverCarFuelMaxLtr`.
+const DEFAULT_FUEL_MAX_L: f64 = 100.0;
+
 // ── Pitwall Frame Type ──────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, PitwallFrame)]
@@ -149,7 +153,7 @@ impl TelemetryCoordinator {
                 session_laps: None,
                 session_time_sec: None,
             },
-            fuel_max_l: 0.0,
+            fuel_max_l: DEFAULT_FUEL_MAX_L,
             session_laps: None,
             session_time_sec: None,
         }
@@ -168,16 +172,32 @@ impl TelemetryCoordinator {
         }
         self.last_session_key = key.clone();
         self.reset_buffers();
-        self.fuel_max_l = key.fuel_max_l;
+
+        if key.fuel_max_l > 0.0 {
+            eprintln!(
+                "[telemetry] session fuel capacity: {:.1} L (kind={}, laps={:?}, time={:?})",
+                key.fuel_max_l, key.kind, key.session_laps, key.session_time_sec
+            );
+            self.fuel_max_l = key.fuel_max_l;
+        } else {
+            eprintln!(
+                "[telemetry] session did not provide fuel capacity, keeping default {:.1} L",
+                self.fuel_max_l,
+            );
+        }
+
         self.session_laps = key.session_laps;
         self.session_time_sec = key.session_time_sec;
     }
 
     fn process_frame(&mut self, frame: &FuelTelemetry) -> Option<TelemetryEvent> {
         if self.detector.on_lap(frame.lap_completed) {
-            if self.fuel_max_l <= 0.0 {
-                return None;
-            }
+            eprintln!(
+                "[telemetry] SF crossing: lap={}, fuel={:.1}%, max={:.1}L",
+                frame.lap_completed,
+                frame.fuel_level_pct,
+                self.fuel_max_l,
+            );
 
             let mut ins = SFInputs {
                 fuel_max_l: self.fuel_max_l,
@@ -192,6 +212,11 @@ impl TelemetryCoordinator {
             };
 
             let result = compute_on_sf_crossing(&mut ins);
+
+            eprintln!(
+                "[telemetry] result: confidence={}, refuel={:.1}L, laps_left={}, fuel_per_lap={:.1}L",
+                result.confidence, result.refuel_l, result.laps_left, result.fuel_per_lap,
+            );
 
             let ts = SystemTime::now()
                 .duration_since(UNIX_EPOCH)

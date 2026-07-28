@@ -100,6 +100,7 @@ async function main(): Promise<void> {
 
   const channel = new Channel<TelemetryEvent>();
   channel.onmessage = (event) => {
+    console.log("[telemetry] channel event:", JSON.stringify(event));
     if (isFuelState(event)) {
       render(event);
     }
