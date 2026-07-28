@@ -1,12 +1,12 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "DAHARA Fuel Calc",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "identifier": "dev.dahara.fuelcalc",
   "build": {
     "frontendDist": "../packages/renderer/dist",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npm run build && node scripts/build-sidecar.mjs",
     "beforeDevCommand": "npm run dev -w @dahara/renderer"
   },
   "app": {

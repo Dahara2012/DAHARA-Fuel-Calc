@@ -39,6 +39,10 @@ pub fn resolve_sidecar_path(app: &AppHandle) -> Result<PathBuf, String> {
     let mut candidates: Vec<PathBuf> = Vec::new();
     candidates.push(resource_dir.join("binaries").join(exe_name));
     candidates.push(resource_dir.join(exe_name));
+    if let Some(parent) = resource_dir.parent() {
+        candidates.push(parent.join(exe_name));
+    }
+    candidates.push(resource_dir.join("resources").join("binaries").join(exe_name));
     if let Ok(cwd) = std::env::current_dir() {
         candidates.push(cwd.join("binaries").join(exe_name));
     }
@@ -55,8 +59,8 @@ pub fn resolve_sidecar_path(app: &AppHandle) -> Result<PathBuf, String> {
     }
 
     Err(format!(
-        "sidecar binary not found. tried: {:?}",
-        candidates
+        "sidecar binary not found. resource_dir={:?} tried: {:?}",
+        resource_dir, candidates
     ))
 }
 

@@ -2,7 +2,7 @@
 // On non-Windows hosts (i.e. Linux dev), this script just typechecks the sidecar
 // TS source; the actual exe compilation must be done on Windows.
 import { spawnSync } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -37,7 +37,15 @@ if (process.platform === "win32") {
     ],
     { cwd: root, stdio: "inherit" },
   );
-  process.exit(r.status ?? 0);
+  if (r.status !== 0) process.exit(r.status ?? 1);
+  try {
+    const stats = statSync(out);
+    console.log(`[build-sidecar] exe created: ${out} (${stats.size} bytes)`);
+  } catch {
+    console.error(`[build-sidecar] expected output not found: ${out}`);
+    process.exit(1);
+  }
+  process.exit(0);
 }
 
 console.log(
