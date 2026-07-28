@@ -57,3 +57,24 @@ const png = Buffer.concat([
 mkdirSync(dirname(out), { recursive: true });
 writeFileSync(out, png);
 console.log(`wrote ${out} (${png.length} bytes)`);
+
+// Also generate a .ico file (PNG-embedded ICO for Windows).
+const icoPath = resolve(__dirname, "..", "src-tauri", "icons", "icon.ico");
+const icoHeader = Buffer.alloc(6);
+icoHeader.writeUInt16LE(0, 0);   // reserved
+icoHeader.writeUInt16LE(1, 2);   // type: ICO
+icoHeader.writeUInt16LE(1, 4);   // count
+
+const dirEntry = Buffer.alloc(16);
+dirEntry[0] = W < 256 ? W : 0;  // width (0 = 256)
+dirEntry[1] = H < 256 ? H : 0;  // height
+dirEntry[2] = 0;                 // colors
+dirEntry[3] = 0;                 // reserved
+dirEntry.writeUInt16LE(1, 4);    // color planes
+dirEntry.writeUInt16LE(32, 6);   // bits per pixel
+dirEntry.writeUInt32LE(png.length, 8);  // image size
+dirEntry.writeUInt32LE(icoHeader.length + dirEntry.length, 12);  // offset
+
+const ico = Buffer.concat([icoHeader, dirEntry, png]);
+writeFileSync(icoPath, ico);
+console.log(`wrote ${icoPath} (${ico.length} bytes)`);

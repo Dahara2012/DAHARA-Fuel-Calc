@@ -1,9 +1,17 @@
 use serde::Deserialize;
 use std::path::PathBuf;
-use std::process::Stdio;
+use std::process::{ExitStatus, Stdio};
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
+
+fn exit_status_desc(status: &ExitStatus) -> String {
+    let code = format!("{:?}", status.code());
+    #[cfg(unix)]
+    { format!("code={code} signal={:?}", status.signal()) }
+    #[cfg(not(unix))]
+    { format!("code={code}") }
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
@@ -100,9 +108,8 @@ pub async fn spawn_and_pump(app: AppHandle) -> Result<(), String> {
 
         match child.wait().await {
             Ok(status) => eprintln!(
-                "[sidecar] process exited: code={:?} signal={:?}",
-                status.code(),
-                status.signal()
+                "[sidecar] process exited: {}",
+                exit_status_desc(&status)
             ),
             Err(err) => eprintln!("[sidecar] wait error: {err}"),
         }

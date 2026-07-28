@@ -1,4 +1,4 @@
-use tauri::{Manager, WebviewWindow};
+use tauri::WebviewWindow;
 
 pub fn configure_overlay_window(window: &WebviewWindow) {
     let _ = window.set_decorations(false);
