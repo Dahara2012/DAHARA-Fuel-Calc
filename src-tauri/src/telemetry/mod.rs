@@ -52,7 +52,6 @@ pub enum TelemetryEvent {
     #[serde(rename = "status")]
     Status {
         connected: bool,
-        in_race: bool,
     },
 }
 
@@ -124,9 +123,6 @@ impl SessionKey {
         }
     }
 
-    fn is_race(&self) -> bool {
-        self.kind == "race"
-    }
 }
 
 // ── Telemetry Coordinator ────────────────────────────────────────────
@@ -136,7 +132,6 @@ struct TelemetryCoordinator {
     fuel_history: CappedBuffer<f64>,
     lap_time_history: CappedBuffer<f64>,
     last_session_key: SessionKey,
-    in_race: bool,
     fuel_max_l: f64,
     session_laps: Option<i32>,
     session_time_sec: Option<f64>,
@@ -154,7 +149,6 @@ impl TelemetryCoordinator {
                 session_laps: None,
                 session_time_sec: None,
             },
-            in_race: false,
             fuel_max_l: 0.0,
             session_laps: None,
             session_time_sec: None,
@@ -174,7 +168,6 @@ impl TelemetryCoordinator {
         }
         self.last_session_key = key.clone();
         self.reset_buffers();
-        self.in_race = key.is_race();
         self.fuel_max_l = key.fuel_max_l;
         self.session_laps = key.session_laps;
         self.session_time_sec = key.session_time_sec;
@@ -247,15 +240,10 @@ pub async fn run_telemetry(
                 if last_status.elapsed() >= status_interval {
                     if channel.send(TelemetryEvent::Status {
                         connected: true,
-                        in_race: coordinator.in_race,
                     }).is_err() {
                         break;
                     }
                     last_status = Instant::now();
-                }
-
-                if !coordinator.in_race {
-                    continue;
                 }
 
                 if let Some(event) = coordinator.process_frame(&frame) {

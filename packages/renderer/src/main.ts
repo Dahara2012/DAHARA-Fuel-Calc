@@ -21,7 +21,6 @@ type FuelState = {
 type StatusEvent = {
   type: "status";
   connected: boolean;
-  inRace: boolean;
 };
 
 type TelemetryEvent = FuelState | StatusEvent;
@@ -101,11 +100,6 @@ async function main(): Promise<void> {
 
   const channel = new Channel<TelemetryEvent>();
   channel.onmessage = (event) => {
-    if (event.type === "status" && event.inRace === false) {
-      renderIdle();
-      return;
-    }
-
     if (isFuelState(event)) {
       render(event);
     }

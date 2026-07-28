@@ -138,7 +138,7 @@ or a Windows CI runner.
 
 ## Known limitations / v1 scope
 
-- Race sessions only. Practice and qualifying show `—` in gray.
+- Works in all session types (race, practice, qualifying).
 - The overlay's window position is hardcoded to `(20, 20)`. No drag-to-move
   or settings UI yet.
 - No fuel safety margin; the number is the raw calculation.
