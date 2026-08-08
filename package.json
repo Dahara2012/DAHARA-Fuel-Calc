@@ -1,6 +1,6 @@
 {
   "name": "dahara-fuel-calc",
-  "version": "0.2.8",
+  "version": "0.2.10",
   "private": true,
   "type": "module",
   "description": "iRacing fuel calculator overlay (Tauri + pitwall)",

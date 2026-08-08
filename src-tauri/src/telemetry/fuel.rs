@@ -2,9 +2,11 @@ use super::rolling::{consecutive_deltas, median, CappedBuffer};
 
 pub struct SFInputs<'a> {
     pub fuel_max_l: f64,
-    pub current_fuel_pct: f64,
+    pub fuel_level_l: f64,
     pub last_lap_time_s: f64,
     pub time_remain_s: f64,
+    pub time_total_s: f64,
+    pub time_elapsed_s: f64,
     pub laps_remaining: i32,
     pub fuel_history: &'a mut CappedBuffer<f64>,
     pub lap_time_history: &'a mut CappedBuffer<f64>,
@@ -20,21 +22,41 @@ pub struct SFResult {
     pub confidence: &'static str,
 }
 
+/// iRacing reports this as "no time limit" in `SessionTimeRemain` (7 days).
+const TIME_UNLIMITED_S: f64 = 604800.0;
+
 /// Laps remaining in the session, using iRacing telemetry directly.
 ///
-/// `SessionLapsRemainEx` reports the laps left till the session ends and is
-/// `-1` when the session is not lap-limited. When it is unavailable (time-
-/// limited sessions), fall back to estimating from the remaining time and the
-/// median lap time.
-fn compute_remaining_laps(laps_remaining: i32, time_remain_s: f64, lap_times: &[f64]) -> i32 {
-    if laps_remaining >= 0 {
+/// `SessionLapsRemainEx` reports the laps left till the session ends, but only
+/// for lap-limited sessions: iRacing reports `32767` (and occasionally `-1` or
+/// `0`) when the session is not lap-limited, so only sane lap counts are
+/// accepted. For time-limited sessions the primary source is `SessionTimeRemain`
+/// (iRacing documents it as `-1` until the session state is Racing, and `604800`
+/// for sessions without a time limit), falling back to
+/// `SessionTimeTotal - SessionTime` when it is unusable.
+fn compute_remaining_laps(
+    laps_remaining: i32,
+    time_remain_s: f64,
+    time_total_s: f64,
+    time_elapsed_s: f64,
+    lap_times: &[f64],
+) -> i32 {
+    if (1..=1000).contains(&laps_remaining) {
         return laps_remaining;
     }
 
-    if time_remain_s > 0.0 && !lap_times.is_empty() {
+    let remaining = if time_remain_s > 0.0 && time_remain_s < TIME_UNLIMITED_S {
+        time_remain_s
+    } else if time_total_s > 0.0 && time_total_s < TIME_UNLIMITED_S {
+        (time_total_s - time_elapsed_s).max(0.0)
+    } else {
+        0.0
+    };
+
+    if remaining > 0.0 && !lap_times.is_empty() {
         let med = median(lap_times);
         if med > 0.0 {
-            return (time_remain_s / med).ceil().max(0.0) as i32;
+            return (remaining / med).ceil().max(0.0) as i32;
         }
     }
 
@@ -42,7 +64,7 @@ fn compute_remaining_laps(laps_remaining: i32, time_remain_s: f64, lap_times: &[
 }
 
 pub fn compute_on_sf_crossing(inputs: &mut SFInputs) -> SFResult {
-    let fuel_level_l = inputs.current_fuel_pct * inputs.fuel_max_l;
+    let fuel_level_l = inputs.fuel_level_l;
 
     inputs.fuel_history.push(fuel_level_l);
     inputs.lap_time_history.push(inputs.last_lap_time_s);
@@ -60,6 +82,8 @@ pub fn compute_on_sf_crossing(inputs: &mut SFInputs) -> SFResult {
     let laps_left = compute_remaining_laps(
         inputs.laps_remaining,
         inputs.time_remain_s,
+        inputs.time_total_s,
+        inputs.time_elapsed_s,
         lap_times,
     );
 
@@ -96,9 +120,11 @@ mod tests {
     ) -> SFInputs<'a> {
         let mut inputs = SFInputs {
             fuel_max_l: 100.0,
-            current_fuel_pct: 0.5,
+            fuel_level_l: 50.0,
             last_lap_time_s: 90.0,
             time_remain_s: 1800.0,
+            time_total_s: 0.0,
+            time_elapsed_s: 0.0,
             laps_remaining: -1,
             fuel_history: fh,
             lap_time_history: lh,
@@ -126,7 +152,7 @@ mod tests {
 
         for i in 0..5 {
             let mut ins = with_bufs(&mut fh, &mut lh, |x| {
-                x.current_fuel_pct = 0.6 - (i as f64) * 0.02;
+                x.fuel_level_l = 60.0 - (i as f64) * 2.0;
                 x.last_lap_time_s = 90.0;
                 x.time_remain_s = 1800.0 - (i as f64) * 90.0;
             });
@@ -134,7 +160,7 @@ mod tests {
         }
 
         let mut ins = with_bufs(&mut fh, &mut lh, |x| {
-            x.current_fuel_pct = 0.5;
+            x.fuel_level_l = 50.0;
             x.last_lap_time_s = 90.0;
             x.time_remain_s = 1350.0;
         });
@@ -151,7 +177,7 @@ mod tests {
 
         for i in 0..5 {
             let mut ins = with_bufs(&mut fh, &mut lh, |x| {
-                x.current_fuel_pct = 0.5 - (i as f64) * 0.02;
+                x.fuel_level_l = 50.0 - (i as f64) * 2.0;
                 x.last_lap_time_s = 80.0;
                 x.laps_remaining = 24 - i;
                 x.time_remain_s = 0.0;
@@ -160,7 +186,7 @@ mod tests {
         }
 
         let mut ins = with_bufs(&mut fh, &mut lh, |x| {
-            x.current_fuel_pct = 0.4;
+            x.fuel_level_l = 40.0;
             x.last_lap_time_s = 80.0;
             x.laps_remaining = 22;
             x.time_remain_s = 0.0;
@@ -178,7 +204,7 @@ mod tests {
 
         for i in 0..5 {
             let mut ins = with_bufs(&mut fh, &mut lh, |x| {
-                x.current_fuel_pct = 0.9 - (i as f64) * 0.02;
+                x.fuel_level_l = 90.0 - (i as f64) * 2.0;
                 x.last_lap_time_s = 80.0;
                 x.laps_remaining = 3;
                 x.time_remain_s = 0.0;
@@ -187,7 +213,7 @@ mod tests {
         }
 
         let mut ins = with_bufs(&mut fh, &mut lh, |x| {
-            x.current_fuel_pct = 0.8;
+            x.fuel_level_l = 80.0;
             x.last_lap_time_s = 80.0;
             x.laps_remaining = 3;
             x.time_remain_s = 0.0;
@@ -209,7 +235,7 @@ mod tests {
 
         for i in 0..fuel.len() {
             let mut ins = with_bufs(&mut fh, &mut lh, |x| {
-                x.current_fuel_pct = fuel[i];
+                x.fuel_level_l = fuel[i] * 100.0;
                 x.last_lap_time_s = lap_times[i];
                 x.laps_remaining = 10;
                 x.time_remain_s = 0.0;
@@ -218,7 +244,7 @@ mod tests {
         }
 
         let mut ins = with_bufs(&mut fh, &mut lh, |x| {
-            x.current_fuel_pct = 0.5;
+            x.fuel_level_l = 50.0;
             x.last_lap_time_s = 90.0;
             x.laps_remaining = 10;
             x.time_remain_s = 0.0;
@@ -250,6 +276,95 @@ mod tests {
         });
         let r = compute_on_sf_crossing(&mut ins);
         assert_eq!(r.laps_left, 18);
+    }
+
+    #[test]
+    fn laps_remaining_sentinel_32767_falls_back_to_time() {
+        let mut fh = CappedBuffer::new(5);
+        let mut lh = CappedBuffer::new(5);
+        let mut ins = with_bufs(&mut fh, &mut lh, |x| {
+            x.laps_remaining = 32767;
+            x.time_remain_s = 0.0;
+            x.time_total_s = 900.0;
+            x.time_elapsed_s = 0.0;
+            x.last_lap_time_s = 90.0;
+        });
+        let r = compute_on_sf_crossing(&mut ins);
+        assert_eq!(r.laps_left, 10);
+    }
+
+    #[test]
+    fn session_time_remain_is_primary_source() {
+        let mut fh = CappedBuffer::new(5);
+        let mut lh = CappedBuffer::new(5);
+        let mut ins = with_bufs(&mut fh, &mut lh, |x| {
+            x.laps_remaining = 32767;
+            x.time_remain_s = 450.0;
+            x.time_total_s = 900.0;
+            x.time_elapsed_s = 450.0;
+            x.last_lap_time_s = 90.0;
+        });
+        let r = compute_on_sf_crossing(&mut ins);
+        assert_eq!(r.laps_left, 5);
+    }
+
+    #[test]
+    fn time_limit_from_total_minus_elapsed() {
+        let mut fh = CappedBuffer::new(5);
+        let mut lh = CappedBuffer::new(5);
+        let mut ins = with_bufs(&mut fh, &mut lh, |x| {
+            x.laps_remaining = 32767;
+            x.time_remain_s = 0.0;
+            x.time_total_s = 900.0;
+            x.time_elapsed_s = 540.0;
+            x.last_lap_time_s = 90.0;
+        });
+        let r = compute_on_sf_crossing(&mut ins);
+        assert_eq!(r.laps_left, 4);
+    }
+
+    #[test]
+    fn zero_laps_remaining_is_not_lap_limited() {
+        let mut fh = CappedBuffer::new(5);
+        let mut lh = CappedBuffer::new(5);
+        let mut ins = with_bufs(&mut fh, &mut lh, |x| {
+            x.laps_remaining = 0;
+            x.time_remain_s = 0.0;
+            x.time_total_s = 900.0;
+            x.time_elapsed_s = 540.0;
+            x.last_lap_time_s = 90.0;
+        });
+        let r = compute_on_sf_crossing(&mut ins);
+        assert_eq!(r.laps_left, 4);
+    }
+
+    #[test]
+    fn unlimited_time_sentinel_604800_ignored() {
+        let mut fh = CappedBuffer::new(5);
+        let mut lh = CappedBuffer::new(5);
+        let mut ins = with_bufs(&mut fh, &mut lh, |x| {
+            x.laps_remaining = 32767;
+            x.time_remain_s = 604800.0;
+            x.time_total_s = 0.0;
+            x.last_lap_time_s = 90.0;
+        });
+        let r = compute_on_sf_crossing(&mut ins);
+        assert_eq!(r.laps_left, 0);
+    }
+
+    #[test]
+    fn time_total_sentinel_604800_ignored() {
+        let mut fh = CappedBuffer::new(5);
+        let mut lh = CappedBuffer::new(5);
+        let mut ins = with_bufs(&mut fh, &mut lh, |x| {
+            x.laps_remaining = 32767;
+            x.time_remain_s = -1.0;
+            x.time_total_s = 604800.0;
+            x.time_elapsed_s = 0.0;
+            x.last_lap_time_s = 90.0;
+        });
+        let r = compute_on_sf_crossing(&mut ins);
+        assert_eq!(r.laps_left, 0);
     }
 
     #[test]

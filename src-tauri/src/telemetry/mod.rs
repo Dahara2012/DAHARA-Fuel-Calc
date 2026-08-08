@@ -24,14 +24,24 @@ const DEFAULT_FUEL_MAX_L: f64 = 100.0;
 pub struct FuelTelemetry {
     #[field_name = "FuelLevelPct"]
     fuel_level_pct: f32,
+    #[field_name = "FuelLevel"]
+    fuel_level_l: f32,
     #[field_name = "LapLastLapTime"]
     last_lap_time_s: f32,
     #[field_name = "SessionTimeRemain"]
-    time_remain_s: f32,
+    time_remain_s: i32,
+    #[field_name = "SessionTime"]
+    time_elapsed_s: f64,
+    #[field_name = "SessionTimeTotal"]
+    time_total_s: f64,
     #[field_name = "LapCompleted"]
     lap_completed: i32,
     #[field_name = "SessionLapsRemainEx"]
     laps_remaining: i32,
+    #[field_name = "SessionLapsTotal"]
+    laps_total: i32,
+    #[field_name = "SessionState"]
+    session_state: i32,
 }
 
 // ── Telemetry Events ─────────────────────────────────────────────────
@@ -185,17 +195,21 @@ impl TelemetryCoordinator {
 
     fn process_frame(&mut self, frame: &FuelTelemetry) -> Option<TelemetryEvent> {
         if self.detector.on_lap(frame.lap_completed) {
-            let fuel_level_l = frame.fuel_level_pct as f64 * self.fuel_max_l;
+            let fuel_level_l = frame.fuel_level_l as f64;
             let key = &self.last_session_key;
             eprintln!(
-                "[telemetry] SF crossing: lap={}, fuel={:.1}%, level={:.1}L, max={:.1}L, last_lap={:.1}s, time_left={:.0}s, laps_remaining={} (session: {} laps={:?} time={:?})",
+                "[telemetry] SF crossing: lap={}, fuel={:.1}%, level={:.1}L, max={:.1}L, last_lap={:.1}s, time_left={:.0}s, time_total={:.0}s, time_elapsed={:.0}s, laps_remaining={}, laps_total={}, state={} (session: {} laps={:?} time={:?})",
                 frame.lap_completed,
                 frame.fuel_level_pct * 100.0,
                 fuel_level_l,
                 self.fuel_max_l,
                 frame.last_lap_time_s,
                 frame.time_remain_s,
+                frame.time_total_s,
+                frame.time_elapsed_s,
                 frame.laps_remaining,
+                frame.laps_total,
+                frame.session_state,
                 key.kind,
                 key.session_laps,
                 key.session_time_sec,
@@ -203,9 +217,11 @@ impl TelemetryCoordinator {
 
             let mut ins = SFInputs {
                 fuel_max_l: self.fuel_max_l,
-                current_fuel_pct: frame.fuel_level_pct as f64,
+                fuel_level_l: frame.fuel_level_l as f64,
                 last_lap_time_s: frame.last_lap_time_s as f64,
                 time_remain_s: frame.time_remain_s as f64,
+                time_total_s: frame.time_total_s,
+                time_elapsed_s: frame.time_elapsed_s,
                 laps_remaining: frame.laps_remaining,
                 fuel_history: &mut self.fuel_history,
                 lap_time_history: &mut self.lap_time_history,
