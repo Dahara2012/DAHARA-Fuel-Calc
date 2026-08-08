@@ -25,6 +25,7 @@ async fn start_telemetry(
 ) -> Result<(), String> {
     tauri::async_runtime::spawn(async move {
         let mut attempt: u32 = 0;
+        let mut last_hint: Option<String> = None;
         loop {
             attempt += 1;
             match pitwall::LiveConnection::connect().await {
@@ -36,8 +37,14 @@ async fn start_telemetry(
                 Err(e) => {
                     eprintln!(
                         "[telemetry] ERROR: connect failed (attempt {}): {}",
-                        attempt, e
+                        attempt, format_error_chain(&e)
                     );
+                    if let Some(hint) = connect_error_hint(&e) {
+                        if last_hint.as_deref() != Some(hint.as_str()) {
+                            last_hint = Some(hint.clone());
+                            eprintln!("[telemetry] HINT: {hint}");
+                        }
+                    }
                 }
             }
             let _ = channel.send(TelemetryEvent::Status { connected: false });
@@ -47,6 +54,44 @@ async fn start_telemetry(
     });
 
     Ok(())
+}
+
+fn format_error_chain(err: &dyn std::error::Error) -> String {
+    let mut parts = vec![err.to_string()];
+    let mut cur = err.source();
+    while let Some(src) = cur {
+        parts.push(src.to_string());
+        cur = src.source();
+    }
+    parts.join(" -> ")
+}
+
+fn connect_error_hint(err: &dyn std::error::Error) -> Option<String> {
+    #[cfg(windows)]
+    {
+        let mut cur = Some(err);
+        while let Some(e) = cur {
+            if let Some(pit_err) = e.downcast_ref::<pitwall::TelemetryError>() {
+                if let pitwall::TelemetryError::WindowsApi { source, .. } = pit_err {
+                    return match source.code().0 & 0xFFFF {
+                        2 => Some(
+                            "iRacing is not running - start it and the overlay will connect \
+                             automatically."
+                                .into(),
+                        ),
+                        5 => Some(
+                            "Access denied opening iRacing shared memory - check antivirus \
+                             settings or run the app with the same elevation as iRacing."
+                                .into(),
+                        ),
+                        _ => None,
+                    };
+                }
+            }
+            cur = e.source();
+        }
+    }
+    None
 }
 
 pub fn run() {
