@@ -185,13 +185,20 @@ impl TelemetryCoordinator {
 
     fn process_frame(&mut self, frame: &FuelTelemetry) -> Option<TelemetryEvent> {
         if self.detector.on_lap(frame.lap_completed) {
+            let fuel_level_l = frame.fuel_level_pct as f64 * self.fuel_max_l;
+            let key = &self.last_session_key;
             eprintln!(
-                "[telemetry] SF crossing: lap={}, fuel={:.0}%, max={:.1}L, time_left={:.0}s, laps_remaining={}",
+                "[telemetry] SF crossing: lap={}, fuel={:.1}%, level={:.1}L, max={:.1}L, last_lap={:.1}s, time_left={:.0}s, laps_remaining={} (session: {} laps={:?} time={:?})",
                 frame.lap_completed,
                 frame.fuel_level_pct * 100.0,
+                fuel_level_l,
                 self.fuel_max_l,
+                frame.last_lap_time_s,
                 frame.time_remain_s,
                 frame.laps_remaining,
+                key.kind,
+                key.session_laps,
+                key.session_time_sec,
             );
 
             let mut ins = SFInputs {
@@ -207,8 +214,18 @@ impl TelemetryCoordinator {
             let result = compute_on_sf_crossing(&mut ins);
 
             eprintln!(
-                "[telemetry] result: confidence={}, refuel={:.1}L, laps_left={}, fuel_per_lap={:.1}L",
-                result.confidence, result.refuel_l, result.laps_left, result.fuel_per_lap,
+                "[telemetry] inputs: fuel_hist=[{}] lap_hist=[{}]",
+                format_values(self.fuel_history.values()),
+                format_values(self.lap_time_history.values()),
+            );
+            eprintln!(
+                "[telemetry] result: confidence={}, fuel_per_lap={:.1}L, laps_left={}, fuel_needed={:.1}L, refuel={:.1}L, fits_in_tank={}",
+                result.confidence,
+                result.fuel_per_lap,
+                result.laps_left,
+                result.fuel_needed_l,
+                result.refuel_l,
+                result.fits_in_tank,
             );
 
             let ts = SystemTime::now()
@@ -236,6 +253,14 @@ impl TelemetryCoordinator {
 
 // ── Public entry point ───────────────────────────────────────────────
 
+fn format_values(values: &[f64]) -> String {
+    let parts: Vec<String> = values
+        .iter()
+        .map(|v| format!("{v:.1}"))
+        .collect();
+    parts.join(", ")
+}
+
 pub async fn run_telemetry(
     conn: LiveConnection,
     channel: tauri::ipc::Channel<TelemetryEvent>,
@@ -252,20 +277,25 @@ pub async fn run_telemetry(
             maybe_frame = frame_stream.next() => {
                 let frame = match maybe_frame {
                     Some(f) => f,
-                    None => break,
+                    None => {
+                        eprintln!("[telemetry] ERROR: frame stream ended");
+                        break;
+                    }
                 };
 
                 if last_status.elapsed() >= status_interval {
-                    if channel.send(TelemetryEvent::Status {
+                    if let Err(e) = channel.send(TelemetryEvent::Status {
                         connected: true,
-                    }).is_err() {
+                    }) {
+                        eprintln!("[telemetry] ERROR: failed to send status event: {e}");
                         break;
                     }
                     last_status = Instant::now();
                 }
 
                 if let Some(event) = coordinator.process_frame(&frame) {
-                    if channel.send(event).is_err() {
+                    if let Err(e) = channel.send(event) {
+                        eprintln!("[telemetry] ERROR: failed to send fuel event: {e}");
                         break;
                     }
                 }
@@ -273,7 +303,10 @@ pub async fn run_telemetry(
             maybe_session = session_stream.next() => {
                 let session: Arc<SessionInfo> = match maybe_session {
                     Some(s) => s,
-                    None => break,
+                    None => {
+                        eprintln!("[telemetry] ERROR: session stream ended");
+                        break;
+                    }
                 };
                 coordinator.on_session_update(&session);
             }

@@ -4,6 +4,7 @@ mod telemetry;
 mod window;
 
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use tauri::{
     menu::{CheckMenuItemBuilder, MenuItemBuilder, MenuBuilder, SubmenuBuilder},
@@ -22,12 +23,27 @@ fn save_window_position(app: tauri::AppHandle, x: i32, y: i32) {
 async fn start_telemetry(
     channel: tauri::ipc::Channel<TelemetryEvent>,
 ) -> Result<(), String> {
-    let conn = pitwall::LiveConnection::connect()
-        .await
-        .map_err(|e| format!("pitwall connect failed: {e}"))?;
-
     tauri::async_runtime::spawn(async move {
-        telemetry::run_telemetry(conn, channel).await;
+        let mut attempt: u32 = 0;
+        loop {
+            attempt += 1;
+            match pitwall::LiveConnection::connect().await {
+                Ok(conn) => {
+                    eprintln!("[telemetry] STATUS: connected to iRacing (attempt {})", attempt);
+                    telemetry::run_telemetry(conn, channel.clone()).await;
+                    eprintln!("[telemetry] STATUS: disconnected");
+                }
+                Err(e) => {
+                    eprintln!(
+                        "[telemetry] ERROR: connect failed (attempt {}): {}",
+                        attempt, e
+                    );
+                }
+            }
+            let _ = channel.send(TelemetryEvent::Status { connected: false });
+            eprintln!("[telemetry] STATUS: not connected - retrying in 2s");
+            tokio::time::sleep(Duration::from_secs(2)).await;
+        }
     });
 
     Ok(())
