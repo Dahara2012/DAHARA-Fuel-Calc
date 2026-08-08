@@ -29,7 +29,7 @@ pub struct FuelTelemetry {
     #[field_name = "LapLastLapTime"]
     last_lap_time_s: f32,
     #[field_name = "SessionTimeRemain"]
-    time_remain_s: i32,
+    time_remain_s: f64,
     #[field_name = "SessionTime"]
     time_elapsed_s: f64,
     #[field_name = "SessionTimeTotal"]
@@ -219,7 +219,7 @@ impl TelemetryCoordinator {
                 fuel_max_l: self.fuel_max_l,
                 fuel_level_l: frame.fuel_level_l as f64,
                 last_lap_time_s: frame.last_lap_time_s as f64,
-                time_remain_s: frame.time_remain_s as f64,
+                time_remain_s: frame.time_remain_s,
                 time_total_s: frame.time_total_s,
                 time_elapsed_s: frame.time_elapsed_s,
                 laps_remaining: frame.laps_remaining,
@@ -254,7 +254,7 @@ impl TelemetryCoordinator {
                 fuel_level_l: result.fuel_level_l,
                 fuel_max_l: self.fuel_max_l,
                 lap_time_s: frame.last_lap_time_s as f64,
-                time_remain_s: frame.time_remain_s as f64,
+                time_remain_s: frame.time_remain_s,
                 laps_left: result.laps_left,
                 fuel_per_lap: result.fuel_per_lap,
                 refuel_l: result.refuel_l,
