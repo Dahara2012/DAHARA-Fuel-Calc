@@ -272,6 +272,16 @@ pub async fn run_telemetry(
     let mut last_status = Instant::now();
     let status_interval = Duration::from_millis(500);
 
+    let mut first_frame = true;
+    let mut frame_count: u64 = 0;
+    let mut last_frame = Instant::now();
+    let mut warned_stall = false;
+    let mut last_heartbeat = Instant::now();
+    const STALL_WARN: Duration = Duration::from_secs(30);
+    const STALL_RECONNECT: Duration = Duration::from_secs(90);
+    const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(10);
+    let mut watchdog = tokio::time::interval(Duration::from_secs(1));
+
     loop {
         tokio::select! {
             maybe_frame = frame_stream.next() => {
@@ -282,6 +292,32 @@ pub async fn run_telemetry(
                         break;
                     }
                 };
+
+                last_frame = Instant::now();
+                warned_stall = false;
+                frame_count += 1;
+
+                if first_frame {
+                    first_frame = false;
+                    eprintln!(
+                        "[telemetry] first frame: lap_completed={}, fuel={:.1}%, last_lap={:.1}s, time_left={:.0}s, laps_remaining={}",
+                        frame.lap_completed,
+                        frame.fuel_level_pct * 100.0,
+                        frame.last_lap_time_s,
+                        frame.time_remain_s,
+                        frame.laps_remaining,
+                    );
+                }
+
+                if last_heartbeat.elapsed() >= HEARTBEAT_INTERVAL {
+                    last_heartbeat = Instant::now();
+                    eprintln!(
+                        "[telemetry] alive: frames={}, lap={}, fuel={:.1}%",
+                        frame_count,
+                        frame.lap_completed,
+                        frame.fuel_level_pct * 100.0,
+                    );
+                }
 
                 if last_status.elapsed() >= status_interval {
                     if let Err(e) = channel.send(TelemetryEvent::Status {
@@ -309,6 +345,23 @@ pub async fn run_telemetry(
                     }
                 };
                 coordinator.on_session_update(&session);
+            }
+            _ = watchdog.tick() => {
+                let stalled_for = last_frame.elapsed();
+                if stalled_for > STALL_RECONNECT {
+                    eprintln!(
+                        "[telemetry] WARN: no telemetry frames for {:.0}s, reconnecting",
+                        stalled_for.as_secs_f64()
+                    );
+                    break;
+                }
+                if stalled_for > STALL_WARN && !warned_stall {
+                    warned_stall = true;
+                    eprintln!(
+                        "[telemetry] WARN: no telemetry frames for {:.0}s, still waiting",
+                        stalled_for.as_secs_f64()
+                    );
+                }
             }
         }
     }

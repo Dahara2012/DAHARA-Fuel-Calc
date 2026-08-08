@@ -51,11 +51,11 @@ async fn start_telemetry(
 
 pub fn run() {
     if std::env::var("DAHARA_LOG").is_ok() || cfg!(debug_assertions) {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(
-                tracing_subscriber::EnvFilter::from_env("DAHARA_LOG"),
-            )
-            .try_init();
+        let filter = match std::env::var("DAHARA_LOG") {
+            Ok(v) if !v.is_empty() => tracing_subscriber::EnvFilter::new(v),
+            _ => tracing_subscriber::EnvFilter::new("info"),
+        };
+        let _ = tracing_subscriber::fmt().with_env_filter(filter).try_init();
     }
 
     tauri::Builder::default()
