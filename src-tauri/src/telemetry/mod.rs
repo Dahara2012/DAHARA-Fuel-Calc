@@ -37,7 +37,7 @@ pub struct FuelTelemetry {
 // ── Telemetry Events ─────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "camelCase")]
+#[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum TelemetryEvent {
     #[serde(rename = "state")]
     FuelState {
@@ -137,8 +137,6 @@ struct TelemetryCoordinator {
     lap_time_history: CappedBuffer<f64>,
     last_session_key: SessionKey,
     fuel_max_l: f64,
-    session_laps: Option<i32>,
-    session_time_sec: Option<f64>,
 }
 
 impl TelemetryCoordinator {
@@ -154,8 +152,6 @@ impl TelemetryCoordinator {
                 session_time_sec: None,
             },
             fuel_max_l: DEFAULT_FUEL_MAX_L,
-            session_laps: None,
-            session_time_sec: None,
         }
     }
 
@@ -185,18 +181,17 @@ impl TelemetryCoordinator {
                 self.fuel_max_l,
             );
         }
-
-        self.session_laps = key.session_laps;
-        self.session_time_sec = key.session_time_sec;
     }
 
     fn process_frame(&mut self, frame: &FuelTelemetry) -> Option<TelemetryEvent> {
         if self.detector.on_lap(frame.lap_completed) {
             eprintln!(
-                "[telemetry] SF crossing: lap={}, fuel={:.0}%, max={:.1}L",
+                "[telemetry] SF crossing: lap={}, fuel={:.0}%, max={:.1}L, time_left={:.0}s, laps_remaining={}",
                 frame.lap_completed,
                 frame.fuel_level_pct * 100.0,
                 self.fuel_max_l,
+                frame.time_remain_s,
+                frame.laps_remaining,
             );
 
             let mut ins = SFInputs {
@@ -205,8 +200,6 @@ impl TelemetryCoordinator {
                 last_lap_time_s: frame.last_lap_time_s as f64,
                 time_remain_s: frame.time_remain_s as f64,
                 laps_remaining: frame.laps_remaining,
-                session_laps: self.session_laps,
-                session_time_sec: self.session_time_sec,
                 fuel_history: &mut self.fuel_history,
                 lap_time_history: &mut self.lap_time_history,
             };

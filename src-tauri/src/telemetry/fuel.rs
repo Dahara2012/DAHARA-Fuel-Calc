@@ -6,8 +6,6 @@ pub struct SFInputs<'a> {
     pub last_lap_time_s: f64,
     pub time_remain_s: f64,
     pub laps_remaining: i32,
-    pub session_laps: Option<i32>,
-    pub session_time_sec: Option<f64>,
     pub fuel_history: &'a mut CappedBuffer<f64>,
     pub lap_time_history: &'a mut CappedBuffer<f64>,
 }
@@ -21,18 +19,15 @@ pub struct SFResult {
     pub confidence: &'static str,
 }
 
-fn compute_remaining_laps(
-    time_remain_s: f64,
-    laps_remaining: i32,
-    session_laps: Option<i32>,
-    session_time_sec: Option<f64>,
-    lap_times: &[f64],
-) -> i32 {
-    let _ = session_time_sec; // unused — use telemetry time_remain_s directly
-    let has_lap_limit = session_laps.is_some_and(|l| l > 0);
-
-    if has_lap_limit {
-        return laps_remaining.max(0);
+/// Laps remaining in the session, using iRacing telemetry directly.
+///
+/// `SessionLapsRemainEx` reports the laps left till the session ends and is
+/// `-1` when the session is not lap-limited. When it is unavailable (time-
+/// limited sessions), fall back to estimating from the remaining time and the
+/// median lap time.
+fn compute_remaining_laps(laps_remaining: i32, time_remain_s: f64, lap_times: &[f64]) -> i32 {
+    if laps_remaining >= 0 {
+        return laps_remaining;
     }
 
     if time_remain_s > 0.0 && !lap_times.is_empty() {
@@ -62,10 +57,8 @@ pub fn compute_on_sf_crossing(inputs: &mut SFInputs) -> SFResult {
     };
 
     let laps_left = compute_remaining_laps(
-        inputs.time_remain_s,
         inputs.laps_remaining,
-        inputs.session_laps,
-        inputs.session_time_sec,
+        inputs.time_remain_s,
         lap_times,
     );
 
@@ -104,9 +97,7 @@ mod tests {
             current_fuel_pct: 0.5,
             last_lap_time_s: 90.0,
             time_remain_s: 1800.0,
-            laps_remaining: 25,
-            session_laps: None,
-            session_time_sec: Some(1800.0),
+            laps_remaining: -1,
             fuel_history: fh,
             lap_time_history: lh,
         };
@@ -136,7 +127,6 @@ mod tests {
                 x.current_fuel_pct = 0.6 - (i as f64) * 0.02;
                 x.last_lap_time_s = 90.0;
                 x.time_remain_s = 1800.0 - (i as f64) * 90.0;
-                x.session_time_sec = Some(1800.0);
             });
             compute_on_sf_crossing(&mut ins);
         }
@@ -145,7 +135,6 @@ mod tests {
             x.current_fuel_pct = 0.5;
             x.last_lap_time_s = 90.0;
             x.time_remain_s = 1350.0;
-            x.session_time_sec = Some(1800.0);
         });
         let r = compute_on_sf_crossing(&mut ins);
         assert!((r.fuel_per_lap - 2.0).abs() < 1e-9);
@@ -162,8 +151,7 @@ mod tests {
             let mut ins = with_bufs(&mut fh, &mut lh, |x| {
                 x.current_fuel_pct = 0.5 - (i as f64) * 0.02;
                 x.last_lap_time_s = 80.0;
-                x.session_laps = Some(25);
-                x.session_time_sec = None;
+                x.laps_remaining = 24 - i;
                 x.time_remain_s = 0.0;
             });
             compute_on_sf_crossing(&mut ins);
@@ -173,8 +161,6 @@ mod tests {
             x.current_fuel_pct = 0.4;
             x.last_lap_time_s = 80.0;
             x.laps_remaining = 22;
-            x.session_laps = Some(25);
-            x.session_time_sec = None;
             x.time_remain_s = 0.0;
         });
         let r = compute_on_sf_crossing(&mut ins);
@@ -192,8 +178,7 @@ mod tests {
             let mut ins = with_bufs(&mut fh, &mut lh, |x| {
                 x.current_fuel_pct = 0.9 - (i as f64) * 0.02;
                 x.last_lap_time_s = 80.0;
-                x.session_laps = Some(3);
-                x.session_time_sec = None;
+                x.laps_remaining = 3;
                 x.time_remain_s = 0.0;
             });
             compute_on_sf_crossing(&mut ins);
@@ -203,8 +188,6 @@ mod tests {
             x.current_fuel_pct = 0.8;
             x.last_lap_time_s = 80.0;
             x.laps_remaining = 3;
-            x.session_laps = Some(3);
-            x.session_time_sec = None;
             x.time_remain_s = 0.0;
         });
         let r = compute_on_sf_crossing(&mut ins);
@@ -226,8 +209,7 @@ mod tests {
             let mut ins = with_bufs(&mut fh, &mut lh, |x| {
                 x.current_fuel_pct = fuel[i];
                 x.last_lap_time_s = lap_times[i];
-                x.session_laps = Some(10);
-                x.session_time_sec = None;
+                x.laps_remaining = 10;
                 x.time_remain_s = 0.0;
             });
             compute_on_sf_crossing(&mut ins);
@@ -236,8 +218,7 @@ mod tests {
         let mut ins = with_bufs(&mut fh, &mut lh, |x| {
             x.current_fuel_pct = 0.5;
             x.last_lap_time_s = 90.0;
-            x.session_laps = Some(10);
-            x.session_time_sec = None;
+            x.laps_remaining = 10;
             x.time_remain_s = 0.0;
         });
         let r = compute_on_sf_crossing(&mut ins);
@@ -249,8 +230,6 @@ mod tests {
         let mut fh = CappedBuffer::new(5);
         let mut lh = CappedBuffer::new(5);
         let mut ins = with_bufs(&mut fh, &mut lh, |x| {
-            x.session_laps = None;
-            x.session_time_sec = None;
             x.time_remain_s = 1800.0;
             x.last_lap_time_s = 90.0;
         });
@@ -260,12 +239,22 @@ mod tests {
     }
 
     #[test]
+    fn frame_laps_remaining_used_without_session_info() {
+        let mut fh = CappedBuffer::new(5);
+        let mut lh = CappedBuffer::new(5);
+        let mut ins = with_bufs(&mut fh, &mut lh, |x| {
+            x.laps_remaining = 18;
+            x.time_remain_s = 0.0;
+        });
+        let r = compute_on_sf_crossing(&mut ins);
+        assert_eq!(r.laps_left, 18);
+    }
+
+    #[test]
     fn time_limited_no_lap_history_returns_zero() {
         let mut fh = CappedBuffer::new(5);
         let mut lh = CappedBuffer::new(5);
         let mut ins = with_bufs(&mut fh, &mut lh, |x| {
-            x.session_laps = None;
-            x.session_time_sec = Some(1800.0);
             x.time_remain_s = 1800.0;
             x.last_lap_time_s = 0.0;
         });

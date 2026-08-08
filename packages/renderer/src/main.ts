@@ -58,7 +58,7 @@ function formatLiters(n: number): string {
 }
 
 function render(state: FuelState): void {
-  const refuel = Math.max(0, state.refuelL);
+  const refuel = Math.max(0, state.refuelL ?? 0);
   setValue(formatLiters(refuel));
   if (refuel <= 0) {
     setMood("ok");
