@@ -66,7 +66,7 @@ fn format_error_chain(err: &dyn std::error::Error) -> String {
     parts.join(" -> ")
 }
 
-fn connect_error_hint(err: &dyn std::error::Error) -> Option<String> {
+fn connect_error_hint(err: &(dyn std::error::Error + 'static)) -> Option<String> {
     #[cfg(windows)]
     {
         let mut cur = Some(err);
