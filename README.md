@@ -52,7 +52,8 @@ On every S/F crossing, the sidecar:
 2. Computes `fuelPerLap = median(fuelDeltas)` (newest minus older).
 3. Computes `lapsLeft`:
    - **Lap-limited:** `SessionLapsRemainEx`
-   - **Time-limited:** `ceil(SessionTimeRemain / median(lapTimes))`
+   - **Time-limited:** `ceil(SessionTimeRemain / median(lapTimes))`, plus one
+     extra lap when the first decimal place of the division is 5 or higher.
 4. `fuelNeeded = lapsLeft * fuelPerLap`
 5. `refuelL = fuelNeeded - currentFuelLevelL`
 6. Color: green if `currentFuelLevelL + refuelL <= fuelMaxL`, else red.

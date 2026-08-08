@@ -34,6 +34,9 @@ const TIME_UNLIMITED_S: f64 = 604800.0;
 /// (iRacing documents it as `-1` until the session state is Racing, and `604800`
 /// for sessions without a time limit), falling back to
 /// `SessionTimeTotal - SessionTime` when it is unusable.
+///
+/// Time-limited sessions round up via ceiling, plus one extra lap when the
+/// first decimal place of `remaining / median(lap_times)` is 5 or higher.
 fn compute_remaining_laps(
     laps_remaining: i32,
     time_remain_s: f64,
@@ -56,7 +59,10 @@ fn compute_remaining_laps(
     if remaining > 0.0 && !lap_times.is_empty() {
         let med = median(lap_times);
         if med > 0.0 {
-            return (remaining / med).ceil().max(0.0) as i32;
+            let x = remaining / med;
+            let tenths = ((x * 10.0).floor() as i64) % 10;
+            let x = if tenths >= 5 { x + 1.0 } else { x };
+            return x.ceil().max(0.0) as i32;
         }
     }
 
@@ -377,5 +383,45 @@ mod tests {
         });
         let r = compute_on_sf_crossing(&mut ins);
         assert_eq!(r.laps_left, 0);
+    }
+
+    #[test]
+    fn time_limited_rounding_extra_lap_on_tenths_5plus() {
+        let mut fh = CappedBuffer::new(5);
+        let mut lh = CappedBuffer::new(5);
+        for _ in 0..5 {
+            let mut ins = with_bufs(&mut fh, &mut lh, |x| {
+                x.time_remain_s = 450.0;
+                x.last_lap_time_s = 80.0;
+            });
+            compute_on_sf_crossing(&mut ins);
+        }
+
+        let mut ins = with_bufs(&mut fh, &mut lh, |x| {
+            x.time_remain_s = 450.0;
+            x.last_lap_time_s = 80.0;
+        });
+        let r = compute_on_sf_crossing(&mut ins);
+        assert_eq!((r.laps_left, 450.0_f64 / 80.0_f64), (7, 5.625));
+    }
+
+    #[test]
+    fn time_limited_rounding_no_extra_below_tenths_5() {
+        let mut fh = CappedBuffer::new(5);
+        let mut lh = CappedBuffer::new(5);
+        for _ in 0..5 {
+            let mut ins = with_bufs(&mut fh, &mut lh, |x| {
+                x.time_remain_s = 431.0;
+                x.last_lap_time_s = 80.0;
+            });
+            compute_on_sf_crossing(&mut ins);
+        }
+
+        let mut ins = with_bufs(&mut fh, &mut lh, |x| {
+            x.time_remain_s = 431.0;
+            x.last_lap_time_s = 80.0;
+        });
+        let r = compute_on_sf_crossing(&mut ins);
+        assert_eq!((r.laps_left, 431.0_f64 / 80.0_f64), (6, 5.3875));
     }
 }
